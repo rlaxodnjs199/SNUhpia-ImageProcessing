@@ -1,0 +1,106 @@
+//  main.cpp
+//  Organoid_Measure
+//
+//  Created by minseob on 11/26/2019.
+//  Copyright © 2019 minseob. All rights reserved.
+//
+
+#include <opencv2/opencv.hpp>
+#include <iostream>
+#include <stdio.h>
+#include <unistd.h>
+#include <fstream>
+#include <map>
+#include <functional>
+#include <string>
+#include <dirent.h>
+#include <fcntl.h>
+
+
+using namespace cv;
+using namespace std;
+
+int main()
+{
+   
+    chdir("/Users/chlee/Desktop/Organoind_Tiff_Intensity_Inspector/Organoind_Tiff_Intensity_Inspector/data");
+    char path[1000] = "";
+    getcwd(path, 1000);
+    DIR* dir = opendir(path);
+    struct dirent* file_entry;
+    
+    while ((file_entry = readdir(dir)) != NULL) {   // go into a folder
+               
+          if (!strcmp(file_entry->d_name, ".") || !strcmp(file_entry->d_name, "..")) continue;
+        
+          string file_name = file_entry->d_name;
+          string file_extension = file_name.substr(file_name.length()-3,file_name.length()-1);
+        
+          if (file_extension == "tif") {
+          
+             Mat img_gray = imread(file_name, IMREAD_ANYDEPTH);
+             if (img_gray.empty()) {
+                     cout << "Could not open or find the image" << std::endl;
+                     getcwd(path, 1000);
+                     cout << "current path : "<<path<<endl;
+                     return -1;
+             }
+              
+              cv::Mat dep_img_meter(img_gray.size().height, img_gray.size().width, CV_32F);
+              img_gray.convertTo(img_gray, CV_16U);
+              
+              map<float,float> intensity_pocket;
+              map<float,float>::iterator it;
+              
+              double total_pixel = 0;
+              float min = 50000,  max = 0;
+             
+              
+              for(int y = 0; y < img_gray.rows; y++)
+              {
+                      for(int x = 0; x < img_gray.cols; x++)
+                      {
+                        
+                          if(img_gray.at<uint16_t>(y, x) > max) max =  img_gray.at<uint16_t>(y, x);
+                          if(img_gray.at<uint16_t>(y, x) < min) min =  img_gray.at<uint16_t>(y, x);
+                          
+                          it = intensity_pocket.find(img_gray.at<uint16_t>(y, x));
+                          
+                          if (it != intensity_pocket.end()) // this intensity is already in a map
+                          {
+                                intensity_pocket.at(it->first)++;
+                          }
+                          else  // this intensity is something new. add it to the map.
+                          {
+                                intensity_pocket.insert(std::pair<float,float>(img_gray.at<uint16_t>(y, x), 1));
+                          }
+                       }
+                }
+              chdir("../result");
+              string new_filename = "";
+              new_filename = file_name;
+              new_filename += ".csv";
+              ofstream out(new_filename);
+              for (it=intensity_pocket.begin(); it!=intensity_pocket.end(); ++it)
+              {
+                      out << it->first << "," << it->second<<endl;
+                      total_pixel += it->second;
+              }
+              
+              out << "file name : " << file_name << endl;
+              out << "rows : " <<img_gray.rows << endl;
+              out << "columns : " << img_gray.cols <<endl;
+              if(img_gray.rows *img_gray.cols == total_pixel ) out << "total pixel : "<< total_pixel <<endl;
+              else {
+                  out << "calculation is wrong. " << endl;
+              }
+              out << "distinctive intensity : "<< intensity_pocket.size() <<endl;
+              out << "min : "<< min <<endl;
+              out << "min : "<< max <<endl;
+              out.close();
+              chdir("../data");
+          }
+    }
+    
+    return 0;
+}
